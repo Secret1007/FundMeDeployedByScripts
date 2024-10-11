@@ -8,16 +8,13 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 // 3. 在锁定期内，达到目标值，生产商可以提款
 // 4. 在锁定期内，没有达到目标值，投资人在锁定期以后退款
 contract FundMe {
-    event FundWithdrawByOwner(uint256);
-    event RefundByFunder(address, uint256);
-
     AggregatorV3Interface public dataFeed;
 
     address public owner;
     uint256 deploymentTimestamp;
     uint256 lockTime;
 
-    uint256 constant MINIMUM_VALUE = 1 * 10 ** 18; // USD
+    uint256 constant MINIMUM_VALUE = 100 * 10 ** 18; // USD
     uint256 constant TARGET = 1000 * 10 ** 18;
 
     mapping(address => uint256) public fundersToAmount;
@@ -25,10 +22,11 @@ contract FundMe {
     bool public getFundSuccess = false;
     address erc20Addr;
 
-    constructor(uint256 _lockTime) {
-        dataFeed = AggregatorV3Interface(
-            0x694AA1769357215DE4FAC081bf1f309aDC325306
-        );
+    event FundWithdrawByOwner(uint256);
+    event RefundByFunder(address, uint256);
+
+    constructor(uint256 _lockTime, address dataFeedAddr) {
+        dataFeed = AggregatorV3Interface(dataFeedAddr);
         owner = msg.sender;
         deploymentTimestamp = block.timestamp;
         lockTime = _lockTime;
@@ -59,7 +57,7 @@ contract FundMe {
         uint256 ethAmount
     ) internal view returns (uint256) {
         uint256 ethPrice = uint256(getChainlinkDataFeedLatestAnswer());
-        return (ethPrice * ethAmount) / 10 ** 18;
+        return (ethPrice * ethAmount) / (10 ** 8);
     }
 
     function getFund() public windowClosed onlyOwner {
@@ -82,7 +80,7 @@ contract FundMe {
     function refund() external windowClosed {
         require(
             convertETHToUSD(address(this).balance) < TARGET,
-            "Target is  reached"
+            "Target is reached"
         );
 
         require(fundersToAmount[msg.sender] != 0, "there is no fund for you");
@@ -97,8 +95,8 @@ contract FundMe {
 
     modifier windowClosed() {
         require(
-            block.timestamp < deploymentTimestamp + lockTime,
-            "Not time yet"
+            block.timestamp >= deploymentTimestamp + lockTime,
+            "window is not closed"
         );
         _;
     }

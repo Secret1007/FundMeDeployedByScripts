@@ -1,0 +1,39 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\n// solhint-disable-next-line interface-starts-with-i\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  function getRoundData(\n    uint80 _roundId\n  ) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n\n  function latestRoundData()\n    external\n    view\n    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);\n}\n"
+    },
+    "contracts/FundMe.sol": {
+      "content": "//SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.20;\r\n\r\nimport {AggregatorV3Interface} from \"@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol\";\r\n\r\n// 1. 创建一个收款函数\r\n// 2. 记录投资人并且查看\r\n// 3. 在锁定期内，达到目标值，生产商可以提款\r\n// 4. 在锁定期内，没有达到目标值，投资人在锁定期以后退款\r\ncontract FundMe {\r\n    event FundWithdrawByOwner(uint256);\r\n    event RefundByFunder(address, uint256);\r\n\r\n    AggregatorV3Interface public dataFeed;\r\n\r\n    address public owner;\r\n    uint256 deploymentTimestamp;\r\n    uint256 lockTime;\r\n\r\n    uint256 constant MINIMUM_VALUE = 1 * 10 ** 18; // USD\r\n    uint256 constant TARGET = 1000 * 10 ** 18;\r\n\r\n    mapping(address => uint256) public fundersToAmount;\r\n\r\n    bool public getFundSuccess = false;\r\n    address erc20Addr;\r\n\r\n    constructor(uint256 _lockTime, address dataFeedAddr) {\r\n        dataFeed = AggregatorV3Interface(dataFeedAddr);\r\n        owner = msg.sender;\r\n        deploymentTimestamp = block.timestamp;\r\n        lockTime = _lockTime;\r\n    }\r\n\r\n    function fund() external payable {\r\n        require(convertETHToUSD(msg.value) >= MINIMUM_VALUE, \"Send more ETH\");\r\n        require(\r\n            block.timestamp < deploymentTimestamp + lockTime,\r\n            \"Not time yet\"\r\n        );\r\n        fundersToAmount[msg.sender] = msg.value;\r\n    }\r\n\r\n    function getChainlinkDataFeedLatestAnswer() public view returns (int) {\r\n        (\r\n            ,\r\n            /** uint80 roundID,  */\r\n            int answer /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,\r\n            ,\r\n            ,\r\n\r\n        ) = dataFeed.latestRoundData();\r\n        return answer;\r\n    }\r\n\r\n    function convertETHToUSD(\r\n        uint256 ethAmount\r\n    ) internal view returns (uint256) {\r\n        uint256 ethPrice = uint256(getChainlinkDataFeedLatestAnswer());\r\n        return (ethPrice * ethAmount) / 10 ** 18;\r\n    }\r\n\r\n    function getFund() public windowClosed onlyOwner {\r\n        require(\r\n            convertETHToUSD(address(this).balance) >= TARGET,\r\n            \"Target is not reached\"\r\n        );\r\n\r\n        bool success;\r\n        uint256 balance = address(this).balance;\r\n        (success, ) = payable(msg.sender).call{value: balance}(\"\");\r\n        require(success, \"transfer tx failed\");\r\n\r\n        fundersToAmount[msg.sender] = 0;\r\n        getFundSuccess = true;\r\n\r\n        emit FundWithdrawByOwner(balance);\r\n    }\r\n\r\n    function refund() external windowClosed {\r\n        require(\r\n            convertETHToUSD(address(this).balance) < TARGET,\r\n            \"Target is  reached\"\r\n        );\r\n\r\n        require(fundersToAmount[msg.sender] != 0, \"there is no fund for you\");\r\n        bool success;\r\n        uint256 balance = fundersToAmount[msg.sender];\r\n        (success, ) = payable(msg.sender).call{value: balance}(\"\");\r\n        require(success, \"transfer tx failed\");\r\n\r\n        fundersToAmount[msg.sender] = 0;\r\n        emit RefundByFunder(msg.sender, balance);\r\n    }\r\n\r\n    modifier windowClosed() {\r\n        require(\r\n            block.timestamp < deploymentTimestamp + lockTime,\r\n            \"Not time yet\"\r\n        );\r\n        _;\r\n    }\r\n    modifier onlyOwner() {\r\n        require(msg.sender == owner, \"Only owner can do this\");\r\n        _;\r\n    }\r\n\r\n    function transferOwnership(address newOwner) public onlyOwner {\r\n        owner = newOwner;\r\n    }\r\n\r\n    function setFunderToAmount(\r\n        address funder,\r\n        uint256 amountToUpdate\r\n    ) external {\r\n        require(\r\n            msg.sender == erc20Addr,\r\n            \"you do not have permission to call this funtion\"\r\n        );\r\n        fundersToAmount[funder] = amountToUpdate;\r\n    }\r\n\r\n    function setErc20Addr(address _erc20Addr) public onlyOwner {\r\n        erc20Addr = _erc20Addr;\r\n    }\r\n}\r\n"
+    }
+  },
+  "settings": {
+    "evmVersion": "paris",
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}

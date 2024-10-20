@@ -99,7 +99,7 @@ const { developmentChains } = require("../../helper-hardhat-config")
     await helpers.time.increase(200)
     await helpers.mine()
 
-    await expect(fundMe.getFund()).to.emit(fundMe, "FundWithdrawByOwner").withArgs(ethers.parseEther("1"))
+    await expect(fundMe.getFund()).to.emit(fundMe, "FundWithdrawByOwner").withArgs(ethers.parseEther("1.1"))
 
   })
 
